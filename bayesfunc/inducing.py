@@ -1,5 +1,6 @@
 import torch as t
 import torch.nn as nn
+
 from .conv_mm import conv_mm
 from .abstract_bnn import AbstractLinear, AbstractConv2d
 from .lop import mvnormal_log_prob_unnorm
@@ -8,35 +9,44 @@ from .priors import NealPrior
 
 def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
     device = XLX.device
-    in_features = XLX.shape[-1]
-    out_features = XLY.shape[-3]
+    in_features = XLX.shape[-1] # Din
+    out_features = XLY.shape[-3] # Dout
 
+    # X : S x Din x N
+    # Y : Dout x N x 1
+    # y are the variational parameter, one value for the entire batch samples
+    
     assert 4 == len(XLX.shape) and 4 == len(XLY.shape)
-    assert XLX.shape[0] == XLY.shape[0]
-    assert XLX.shape[-3] in (out_features, 1)
-    assert XLY.shape[-1] == 1
-    S = XLX.shape[0]
+    assert XLX.shape[0] == XLY.shape[0] # sample dimensions are the same
+    assert XLX.shape[-3] in (out_features, 1) # number of output features, or 1 meaning same precision
+    assert XLY.shape[-1] == 1 
+
+    S = XLX.shape[0] # mini batch size
     prior_prec = prior(S)
 
     prior_prec_full = prior_prec.full()
     if len(prior_prec_full.shape) > 2:
         prior_prec_full = prior_prec_full.unsqueeze(1)
 
-    prec = XLX + prior_prec_full
-    L = t.cholesky(prec)
+    prec = XLX + prior_prec_full # precision matrix
+    L = t.linalg.cholesky(prec) # lower triangular decomp of the Hermitian PD precision matrix 
 
     logdet_prec = 2*L.diagonal(dim1=-1, dim2=-2).log().sum(-1)
     logdet_prec = logdet_prec.expand(S, out_features).sum(-1)
 
-    if self._sample is not None: 
+    if self._sample is not None:  # if sample drawn, need to figure out what the Z was
         assert S==self._sample.shape[0]
         dW = self._sample.unsqueeze(-1) - t.cholesky_solve(XLY, L)
         Z = L.transpose(-1, -2) @ dW
-    else:
+    else: 
         Z = t.randn(S, out_features, in_features, 1, device=device, dtype=L.dtype)
-        dW = t.triangular_solve(Z, L, upper=False, transpose=True)[0]
-        self._sample = (t.cholesky_solve(XLY, L) + dW).squeeze(-1)
+        
+        # transform Z to weight space; solve AX = b
+        dW = t.triangular_solve(Z, L, upper=False, transpose=True)[0] # (b, A)
 
+        self._sample = (t.cholesky_solve(XLY, L) + dW).squeeze(-1) # reparameterization of the ELBO to be a function of the noise/sample
+
+    # have a weight sample, compute KL divergence
     logP = mvnormal_log_prob_unnorm(prior_prec, self._sample.transpose(-1, -2))
     logQ = -0.5*(Z**2).sum((-1, -2, -3)) + 0.5*logdet_prec
 
@@ -60,32 +70,40 @@ def rsample_logpq_weights_fc(self, Xi, neuron_prec):
 class GILinearWeights(nn.Module):
     def __init__(self, in_features, out_features, prior=NealPrior, bias=True, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None, full_prec=False):
         super().__init__()
+        
+        # Set inducing points
         assert inducing_batch is not None
         self.inducing_batch = inducing_batch
 
+        # Init layer shape
         self.in_features = in_features
         self.out_features = out_features
         self.bias = bias
 
+        # Init prior
         in_shape   = t.Size([in_features+bias])
         self.prior = prior(in_shape)
 
+        # Set initial variational precision parameter: Lambda_l
         self.log_prec_init = log_prec_init
-        self.log_prec_lr = log_prec_lr
-        lp_init = self.log_prec_init / self.log_prec_lr
-        self.neuron_prec = neuron_prec
+        self.log_prec_lr = log_prec_lr # multiplier for the learning rate of precision pawrameter
+        lp_init = self.log_prec_init / self.log_prec_lr # initial log precision
+        self.neuron_prec = neuron_prec # different precision param for every neuron => expensive (little gain)
 
+        precs = out_features if neuron_prec else 1
+        self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch)) # create variational param in nn graph
+        
+        if full_prec:
+            self.prec_L = nn.Parameter(t.eye(inducing_batch).expand(precs, -1, -1))
+        else:
+            self.prec_L = None
+        
         if inducing_targets is None:
             self.u = nn.Parameter(t.randn(self.out_features, inducing_batch, 1))
         else:
             self.u = nn.Parameter(inducing_targets.clone().to(t.float32).transpose(-1, -2).unsqueeze(-1))
 
-        precs = out_features if neuron_prec else 1
-        self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch))
-        if full_prec:
-            self.prec_L = nn.Parameter(t.eye(inducing_batch).expand(precs, -1, -1))
-        else:
-            self.prec_L = None
+        
         
         self._sample = None
 
