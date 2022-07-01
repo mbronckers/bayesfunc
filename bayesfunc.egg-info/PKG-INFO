@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: bayesfunc
+Version: 0.1.0
+Summary: Variational inference for BNN, DGP and DKP priors over functions
+Home-page: https://github.com/laurencea/bayesfunc/
+Author: Laurence Aitchison, Sebastian Ober
+Author-email: laurence.aitchison@gmail.com
+License: MIT license

@@ -4,7 +4,7 @@ import torch.nn as nn
 from .conv_mm import conv_mm
 from .abstract_bnn import AbstractLinear, AbstractConv2d
 from .lop import mvnormal_log_prob_unnorm
-from .priors import NealPrior, InsanePrior
+from .priors import NealPrior
 
 
 def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
@@ -41,20 +41,19 @@ def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
     else: 
         Z = t.randn(S, out_features, in_features, 1, device=device, dtype=L.dtype)
         
-        # transform Z to weight space; L is chol of precision
-        dW, _ = t.triangular_solve(Z, L, upper=False, transpose=True) # (b, A)
+        # transform Z to weight space; solve AX = b
+        dW = t.triangular_solve(Z, L, upper=False, transpose=True)[0] # (b, A)
 
-        # sample = mu + dW = (LL^T)^-1 @ XLY + (L^-1)@(eps) = var @ XLY + chol(var)@eps
         self._sample = (t.cholesky_solve(XLY, L) + dW).squeeze(-1) # reparameterization of the ELBO to be a function of the noise/sample
 
     # have a weight sample, compute KL divergence
     logP = mvnormal_log_prob_unnorm(prior_prec, self._sample.transpose(-1, -2))
+    print(self._sample.shape)
     logQ = -0.5*(Z**2).sum((-1, -2, -3)) + 0.5*logdet_prec
+    print(Z.shape)
 
     logPQw = logP-logQ
     self.logpq = logPQw
-    # print(self.log_prec_scaled.exp())
-    # print(self.prec_L)
     return self._sample
 
 
@@ -65,8 +64,6 @@ def rsample_logpq_weights_fc(self, Xi, neuron_prec):
         XiLT  = log_prec.exp() * XiT#.transpose(-1, -2)
     else:
         XiLT = XiT @ ((self.prec_L*log_prec.exp())@self.prec_L.transpose(-1, -2))
-        # print("Lam:")
-        # print(((self.prec_L*log_prec.exp())@self.prec_L.transpose(-1, -2)))
     XiLXi = XiLT @ Xi
     XiLY  = XiLT @ self.u
     return rsample_logpq_weights(self, XiLXi, XiLY, self.prior, neuron_prec=neuron_prec)
@@ -94,6 +91,7 @@ class GILinearWeights(nn.Module):
         self.log_prec_lr = log_prec_lr # multiplier for the learning rate of precision pawrameter
         lp_init = self.log_prec_init / self.log_prec_lr # initial log precision
         self.neuron_prec = neuron_prec # different precision param for every neuron => expensive (little gain)
+
         precs = out_features if neuron_prec else 1
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch)) # create variational param in nn graph
         
