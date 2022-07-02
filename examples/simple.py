@@ -1,3 +1,8 @@
+import os, sys
+file_dir = os.path.dirname(__file__)
+_root_dir = os.path.abspath(os.path.join(file_dir, ".."))
+sys.path.insert(0, os.path.abspath(_root_dir))
+
 import torch as t
 from torch.distributions import Normal
 import torch.nn as nn
@@ -16,29 +21,33 @@ out_features = 1
 train_batch = 40
 
 # t.manual_seed(0)
+t.set_printoptions(precision=10, sci_mode=False)
 B.default_dtype = t.float64
 key = B.create_random_state(B.default_dtype, seed=0)
 # B.set_random_seed(0)
 
-X = t.zeros(train_batch, in_features)
-X[:int(train_batch/2), :] = t.rand(int(train_batch/2), in_features)*2. - 4.
-X[int(train_batch/2):, :] = t.rand(int(train_batch/2), in_features)*2. + 2.
-y = X**3. + 3*t.randn(train_batch, in_features)
+# X = t.zeros(train_batch, in_features)
+# X[:int(train_batch/2), :] = t.rand(int(train_batch/2), in_features)*2. - 4.
+# X[int(train_batch/2):, :] = t.rand(int(train_batch/2), in_features)*2. + 2.
+# y = X**3. + 3*t.randn(train_batch, in_features)
 
-#Rescale the outputs to have unit variance
-scale = y.std()
-y = y/scale
+# #Rescale the outputs to have unit variance
+# scale = y.std()
+# y = y/scale
 
 dtype=t.float64
 device="cpu"
 
 key, _, _, X, y, _, _, scale = generate_data(key, dgp=1, size=train_batch, xmin=-4.0, xmax=4.0)
 
+# If comparing to term6, use the following:
+# X = t.load(os.path.join(file_dir, "data/x_tr.pt"), map_location=t.device('cpu'))
+# y = t.load(os.path.join(file_dir, "data/y_tr.pt"), map_location=t.device('cpu'))
+# scale = 20.00762265544338
+
 print(f"Scale DGP: {scale}")
 print(f"ll_var: {3/scale}")
 
-# plt.scatter(X, y)
-# plt.show()
 
 def plot(net):
     with t.no_grad():
@@ -63,7 +72,8 @@ def train(net):
     samples = 10
     for i in range(2000):
         opt.zero_grad()
-        output, logpq, _ = bf.propagate(net, X.expand(samples, -1, -1))
+        X_tr = X.expand(samples, -1, -1).detach().clone()
+        output, logpq, _ = bf.propagate(net, X_tr)
         ll = Normal(output, 3/scale).log_prob(y).sum(-1).mean(-1) # Ober
         
         error = B.sqrt(B.mean((output.mean(0) - y)**2)) # rmse
@@ -85,14 +95,16 @@ def train(net):
         
 
 inducing_batch=train_batch
+_yz, _ = t.meshgrid(B.linspace(-1, 1, 50), B.ones(inducing_batch))
+_yz = _yz.transpose(-1, -2)
 net = nn.Sequential(
-    bf.GILinear(in_features=1, out_features=50, inducing_batch=inducing_batch, prior=InsanePrior, bias=True, full_prec=False, log_prec_init=-4.0),
-    nn.ReLU(),
-    bf.GILinear(in_features=50, out_features=50, inducing_batch=inducing_batch, prior=InsanePrior, bias=True, full_prec=False, log_prec_init=-4.0),
-    nn.ReLU(),
-    bf.GILinear(in_features=50, out_features=1, inducing_batch=inducing_batch, prior=InsanePrior, bias=True, full_prec=False,
-                inducing_targets=y, log_prec_init=-4.0)
-)
+                    bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, log_prec_init=-4.0, inducing_targets=_yz),
+                nn.ReLU(),
+                    bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, log_prec_init=-4.0, inducing_targets=_yz),
+                nn.ReLU(),
+                    bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False,
+                                inducing_targets=y, log_prec_init=-4.0)
+                )
 # net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=t.linspace(-4, 4, inducing_batch)[:, None])
 net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=X)
 net = net.to(device=device, dtype=dtype)
@@ -125,12 +137,12 @@ print(net[1][-1].weights.log_prec_scaled.exp())
 print("Final layer log nz:")
 print(net[1][-1].weights.log_prec_scaled)
 
-_z = net[0].inducing_data.detach().clone()
-_yz = net[1][4].weights.u.detach().clone()
-print("inducing pt locations:")
-print(_z)
-print("inducing pt labels:")
-print(_yz)
+# _z = net[0].inducing_data.detach().clone()
+# _yz = net[1][4].weights.u.detach().clone()
+# print("inducing pt locations:")
+# print(_z)
+# print("inducing pt labels:")
+# print(_yz)
 
 
 plot(net)

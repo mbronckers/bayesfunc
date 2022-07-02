@@ -2,7 +2,7 @@
 import math
 import torch as t
 import numpy as np
-
+import lab as B
 
 class Matrix:
     def __init__(self, device, dtype):
@@ -19,7 +19,7 @@ class Matrix:
 
 
 class Identity(Matrix):
-    def __init__(self, N, device="cpu", dtype=t.float32):
+    def __init__(self, N, device="cpu", dtype=B.default_dtype):
         super().__init__(device, dtype)
 
         self.N = N
@@ -50,7 +50,7 @@ class Identity(Matrix):
 
 
 class Scale(Matrix):
-    def __init__(self, N, scale, device="cpu", dtype=t.float32):
+    def __init__(self, N, scale, device="cpu", dtype=B.default_dtype):
         super().__init__(device, dtype)
 
         self.N = N

@@ -5,7 +5,7 @@ from .conv_mm import conv_mm
 from .abstract_bnn import AbstractLinear, AbstractConv2d
 from .lop import mvnormal_log_prob_unnorm
 from .priors import NealPrior
-
+import lab as B
 
 def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
     device = XLX.device
@@ -103,7 +103,7 @@ class GILinearWeights(nn.Module):
         if inducing_targets is None:
             self.u = nn.Parameter(t.randn(self.out_features, inducing_batch, 1))
         else:
-            self.u = nn.Parameter(inducing_targets.clone().to(t.float32).transpose(-1, -2).unsqueeze(-1))
+            self.u = nn.Parameter(inducing_targets.clone().to(B.default_dtype()).transpose(-1, -2).unsqueeze(-1))
 
         
         

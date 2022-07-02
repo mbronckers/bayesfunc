@@ -1,6 +1,7 @@
 import torch as t
 import torch.nn as nn
-
+import lab as B
+import lab.torch
 from .conv_mm import conv_mm
 from .abstract_bnn import AbstractLinear, AbstractConv2d
 from .lop import mvnormal_log_prob_unnorm
@@ -29,7 +30,8 @@ def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
         prior_prec_full = prior_prec_full.unsqueeze(1)
 
     prec = XLX + prior_prec_full # precision matrix
-    L = t.linalg.cholesky(prec) # lower triangular decomp of the Hermitian PD precision matrix 
+    # L = t.linalg.cholesky(prec) # lower triangular decomp of the Hermitian PD precision matrix 
+    L = B.chol(prec)
 
     logdet_prec = 2*L.diagonal(dim1=-1, dim2=-2).log().sum(-1)
     logdet_prec = logdet_prec.expand(S, out_features).sum(-1)
@@ -39,10 +41,11 @@ def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
         dW = self._sample.unsqueeze(-1) - t.cholesky_solve(XLY, L)
         Z = L.transpose(-1, -2) @ dW
     else: 
-        Z = t.randn(S, out_features, in_features, 1, device=device, dtype=L.dtype)
+        self.key, Z = B.randn(self.key, B.default_dtype, S, out_features, in_features, 1)
         
         # transform Z to weight space; L is chol of precision
-        dW, _ = t.triangular_solve(Z, L, upper=False, transpose=True) # (b, A)
+        # dW, _ = t.triangular_solve(Z, L, upper=False, transpose=True) # (b, A)
+        dW = B.triangular_solve(L.transpose(-1, -2), Z, lower_a=True) # (A.T, b)
 
         # sample = mu + dW = (LL^T)^-1 @ XLY + (L^-1)@(eps) = var @ XLY + chol(var)@eps
         self._sample = (t.cholesky_solve(XLY, L) + dW).squeeze(-1) # reparameterization of the ELBO to be a function of the noise/sample
@@ -69,11 +72,11 @@ def rsample_logpq_weights_fc(self, Xi, neuron_prec):
         # print(((self.prec_L*log_prec.exp())@self.prec_L.transpose(-1, -2)))
     XiLXi = XiLT @ Xi
     XiLY  = XiLT @ self.u
-    return rsample_logpq_weights(self, XiLXi, XiLY, self.prior, neuron_prec=neuron_prec)
+    return rsample_logpq_weights(self, XLX=XiLXi, XLY=XiLY, prior=self.prior, neuron_prec=neuron_prec)
 
 
 class GILinearWeights(nn.Module):
-    def __init__(self, in_features, out_features, prior=NealPrior, bias=True, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None, full_prec=False):
+    def __init__(self, in_features, out_features, key, prior=NealPrior, bias=True, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None, full_prec=False):
         super().__init__()
         
         # Set inducing points
@@ -83,6 +86,7 @@ class GILinearWeights(nn.Module):
         # Init layer shape
         self.in_features = in_features
         self.out_features = out_features
+        self.key = key
         self.bias = bias
 
         # Init prior
@@ -98,14 +102,14 @@ class GILinearWeights(nn.Module):
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch)) # create variational param in nn graph
         
         if full_prec:
-            self.prec_L = nn.Parameter(t.eye(inducing_batch).expand(precs, -1, -1))
+            self.prec_L = nn.Parameter(B.eye(B.default_dtype, inducing_batch).expand(precs, -1, -1))
         else:
             self.prec_L = None
         
         if inducing_targets is None:
-            self.u = nn.Parameter(t.randn(self.out_features, inducing_batch, 1))
+            self.u = nn.Parameter(B.randn(self.key, self.out_features, inducing_batch, 1))
         else:
-            self.u = nn.Parameter(inducing_targets.clone().to(t.float32).transpose(-1, -2).unsqueeze(-1))
+            self.u = nn.Parameter(inducing_targets.clone().to(B.default_dtype).transpose(-1, -2).unsqueeze(-1))
 
         
         
@@ -133,8 +137,8 @@ class LILinearWeights(nn.Module):
         self.log_prec_lr = log_prec_lr
 
         #if neuron_prec:
-        self.u = nn.Parameter(t.randn(self.out_features, inducing_batch, 1))
-        self.Xi = nn.Parameter(t.randn(1, inducing_batch, self.in_features+bias))
+        self.u = nn.Parameter(B.randn(self.out_features, inducing_batch, 1))
+        self.Xi = nn.Parameter(B.randn(1, inducing_batch, self.in_features+bias))
 
         precs = self.out_features if neuron_prec else 1
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch))
@@ -184,7 +188,7 @@ class GIConv2dWeights(nn.Module):
             (_, _, _, Hin, Win) = Xi.shape
             #HW_in = (Hin, Win)
             #HW_out = [(HW_in[i] + 2*self.padding - self.kernel_size) // self.stride + 1 for i in range(2)]
-            self.u = nn.Parameter(t.randn(self.inducing_batch, self.out_channels, Hin, Win, device=Xi.device, dtype=Xi.dtype))
+            self.u = nn.Parameter(B.randn(self.inducing_batch, self.out_channels, Hin, Win, device=Xi.device, dtype=Xi.dtype))
 
         sqrt_prec = (0.5 * self.log_prec_lr * self.log_prec_scaled).exp()[:, None, None, None]
         Xil = sqrt_prec * Xi
@@ -222,8 +226,8 @@ class LIConv2dWeights(nn.Module):
         lp_init = log_prec_init / log_prec_lr
         self.log_prec_lr = log_prec_lr
 
-        self.u = nn.Parameter(t.randn(self.out_channels, inducing_batch, 1))
-        self.Xi = nn.Parameter(t.randn(1, inducing_batch, in_features))
+        self.u = nn.Parameter(B.randn(self.out_channels, inducing_batch, 1))
+        self.Xi = nn.Parameter(B.randn(1, inducing_batch, in_features))
 
         precs = out_features if neuron_prec else 1
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(precs, 1, inducing_batch))

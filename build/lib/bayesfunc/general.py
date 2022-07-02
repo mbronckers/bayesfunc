@@ -4,6 +4,7 @@ import torch.distributions as td
 import torch.nn as nn
 from .prob_prog import VI_Scale, VI_Normal
 from .outputs import CutOutput
+import lab as B
 
 class KG():
     r"""
@@ -27,7 +28,7 @@ class InducingAdd(nn.Module):
         if inducing_data is None:
             self.inducing_data = nn.Parameter(t.randn(*inducing_shape))
         else:
-            i_d = inducing_data.clone().to(t.float32)
+            i_d = inducing_data.clone().to(B.default_dtype)
             if fixed:
                 self.register_buffer("inducing_data", i_d)
             else:

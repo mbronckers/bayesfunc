@@ -1,3 +1,5 @@
+import lab as B
+import lab.torch
 import math
 import torch as t
 import torch.distributions as td
@@ -25,9 +27,9 @@ class InducingAdd(nn.Module):
         assert (inducing_data is not None) != (inducing_shape is not None)
 
         if inducing_data is None:
-            self.inducing_data = nn.Parameter(t.randn(*inducing_shape))
+            self.inducing_data = nn.Parameter(B.randn(*inducing_shape))
         else:
-            i_d = inducing_data.clone().to(t.float32)
+            i_d = inducing_data.clone().to(B.default_dtype)
             if fixed:
                 self.register_buffer("inducing_data", i_d)
             else:
