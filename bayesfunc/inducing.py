@@ -30,8 +30,8 @@ def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
         prior_prec_full = prior_prec_full.unsqueeze(1)
 
     prec = XLX + prior_prec_full # precision matrix
-    # L = t.linalg.cholesky(prec) # lower triangular decomp of the Hermitian PD precision matrix 
-    L = B.chol(prec)
+    L = t.linalg.cholesky(prec) # lower triangular decomp of the Hermitian PD precision matrix 
+    # L = B.chol(prec)
 
     logdet_prec = 2*L.diagonal(dim1=-1, dim2=-2).log().sum(-1)
     logdet_prec = logdet_prec.expand(S, out_features).sum(-1)
@@ -44,9 +44,9 @@ def rsample_logpq_weights(self, XLX, XLY, prior, neuron_prec=True):
         self.key, Z = B.randn(self.key, B.default_dtype, S, out_features, in_features, 1)
         
         # transform Z to weight space; L is chol of precision
-        # dW, _ = t.triangular_solve(Z, L, upper=False, transpose=True) # (b, A)
-        dW = B.triangular_solve(L.transpose(-1, -2), Z, lower_a=True) # (A.T, b)
-
+        dW, _ = t.triangular_solve(Z, L, upper=False, transpose=True) # (b, A)
+        # dW = B.triangular_solve(L.transpose(-1, -2), Z, lower_a=True) # (A.T, b)
+ 
         # sample = mu + dW = (LL^T)^-1 @ XLY + (L^-1)@(eps) = var @ XLY + chol(var)@eps
         self._sample = (t.cholesky_solve(XLY, L) + dW).squeeze(-1) # reparameterization of the ELBO to be a function of the noise/sample
 
