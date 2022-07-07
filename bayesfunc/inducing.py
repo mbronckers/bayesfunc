@@ -107,7 +107,8 @@ class GILinearWeights(nn.Module):
             self.prec_L = None
         
         if inducing_targets is None:
-            self.u = nn.Parameter(B.randn(self.key, self.out_features, inducing_batch, 1))
+            # self.u = nn.Parameter(B.randn(self.key, self.out_features, inducing_batch, 1))
+            self.u = nn.Parameter(B.randn(self.out_features, inducing_batch, 1))
         else:
             self.u = nn.Parameter(inducing_targets.clone().to(B.default_dtype).transpose(-1, -2).unsqueeze(-1))
 
