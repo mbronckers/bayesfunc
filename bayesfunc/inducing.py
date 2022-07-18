@@ -76,7 +76,7 @@ def rsample_logpq_weights_fc(self, Xi, neuron_prec):
 
 
 class GILinearWeights(nn.Module):
-    def __init__(self, in_features, out_features, key, prior=NealPrior, bias=True, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None, full_prec=False):
+    def __init__(self, in_features, out_features, key=None, prior=NealPrior, bias=True, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None, full_prec=False):
         super().__init__()
         
         # Set inducing points
@@ -157,7 +157,7 @@ class LILinearWeights(nn.Module):
 
 
 class GIConv2dWeights(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, prior=NealPrior, stride=1, padding=0, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None):
+    def __init__(self, in_channels, out_channels, kernel_size, key=None, prior=NealPrior, stride=1, padding=0, inducing_targets=None, log_prec_init=-4., log_prec_lr=1., neuron_prec=False, inducing_batch=None):
         super().__init__()
         assert inducing_batch is not None
         assert inducing_batch != 0
@@ -176,7 +176,9 @@ class GIConv2dWeights(nn.Module):
         self.log_prec_lr = log_prec_lr
         self.neuron_prec = neuron_prec
 
-        self.u = None if (inducing_targets is None) else nn.Parameter(inducing_targets.clone().to(t.float32))
+        self.key = key
+
+        self.u = None if (inducing_targets is None) else nn.Parameter(inducing_targets.clone().to(t.float64))
 
         lp_init = self.log_prec_init / self.log_prec_lr
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(self.inducing_batch))
@@ -189,7 +191,7 @@ class GIConv2dWeights(nn.Module):
             (_, _, _, Hin, Win) = Xi.shape
             #HW_in = (Hin, Win)
             #HW_out = [(HW_in[i] + 2*self.padding - self.kernel_size) // self.stride + 1 for i in range(2)]
-            self.u = nn.Parameter(B.randn(self.inducing_batch, self.out_channels, Hin, Win, device=Xi.device, dtype=Xi.dtype))
+            self.u = nn.Parameter(B.randn(self.inducing_batch, self.out_channels, Hin, Win))
 
         sqrt_prec = (0.5 * self.log_prec_lr * self.log_prec_scaled).exp()[:, None, None, None]
         Xil = sqrt_prec * Xi

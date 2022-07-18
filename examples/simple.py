@@ -96,17 +96,30 @@ def train(net):
         
 
 inducing_batch=train_batch
-_yz, _ = t.meshgrid(B.linspace(-1, 1, 50), B.ones(inducing_batch))
-_yz = _yz.transpose(-1, -2)
+
+# Linspace yz
+# _yz, _ = t.meshgrid(B.linspace(-1, 1, 50), B.ones(inducing_batch))
+# _yz = _yz.transpose(-1, -2)
+# net = nn.Sequential(
+#                     bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, neuron_prec=True, log_prec_init=-4.0, inducing_targets=_yz),
+#                 nn.ReLU(),
+#                     bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, neuron_prec=True, full_prec=False, log_prec_init=-4.0, inducing_targets=_yz),
+#                 nn.ReLU(),
+#                     bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, neuron_prec=True, prior=NealPrior, bias=True, full_prec=False,
+#                                 inducing_targets=y, log_prec_init=-4.0)
+#                 )
+
 net = nn.Sequential(
-                    bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, neuron_prec=True, log_prec_init=-4.0, inducing_targets=_yz),
+                    bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, neuron_prec=True, log_prec_init=-4.0),
                 nn.ReLU(),
-                    bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, neuron_prec=True, full_prec=False, log_prec_init=-4.0, inducing_targets=_yz),
+                    bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, neuron_prec=True, full_prec=False, log_prec_init=-4.0),
                 nn.ReLU(),
-                    bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, neuron_prec=True, prior=NealPrior, bias=True, full_prec=False,
-                                inducing_targets=y, log_prec_init=-4.0)
+                    bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, neuron_prec=True, prior=NealPrior, bias=True, full_prec=False, inducing_targets=y, log_prec_init=-4.0)
                 )
+                
+# Linspace for inducing points
 # net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=t.linspace(-4, 4, inducing_batch)[:, None])
+
 net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=X)
 net = net.to(device=device, dtype=dtype)
 

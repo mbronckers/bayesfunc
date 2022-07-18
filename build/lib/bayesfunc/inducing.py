@@ -169,7 +169,7 @@ class GIConv2dWeights(nn.Module):
         self.log_prec_lr = log_prec_lr
         self.neuron_prec = neuron_prec
 
-        self.u = None if (inducing_targets is None) else nn.Parameter(inducing_targets.clone().to(t.float32))
+        self.u = None if (inducing_targets is None) else nn.Parameter(inducing_targets.clone().to(t.float64))
 
         lp_init = self.log_prec_init / self.log_prec_lr
         self.log_prec_scaled = nn.Parameter(lp_init*t.ones(self.inducing_batch))

@@ -32,7 +32,7 @@ class UCI:
     uci.norm.train
     ```
     """
-    def __init__(self, dataset, split, mbatch_size, dtype='float32'):
+    def __init__(self, dataset, split, mbatch_size, dtype='float64'):
         _ROOT = os.path.abspath(os.path.dirname(__file__))
         dataset_dir = f'{_ROOT}/{dataset}/'
         data = np.loadtxt(f'{dataset_dir}/data.txt').astype(getattr(np, dtype))

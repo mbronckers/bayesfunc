@@ -46,7 +46,7 @@ class DoG(ConvTransform):
     def __init__(self, kernel_size, components=2):
         super().__init__()
         self.kernel_size = kernel_size
-        self.log_lengthscale = nn.Parameter(-t.arange(components, dtype=t.float32)[:, None, None])
+        self.log_lengthscale = nn.Parameter(-t.arange(components, dtype=t.float64)[:, None, None])
         self.height          = nn.Parameter(   t.ones(components, 1, 1))
 
     def weights(self, x):

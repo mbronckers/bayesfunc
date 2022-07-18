@@ -40,7 +40,7 @@ class GIGP(nn.Module):
         if inducing_targets is None:
             self.u = nn.Parameter(t.randn(self.inducing_batch, self.out_features))
         else:
-            self.u = nn.Parameter(inducing_targets.clone().to(t.float32))
+            self.u = nn.Parameter(inducing_targets.clone().to(t.float64))
 
         self._sample = None
 

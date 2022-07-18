@@ -5,6 +5,7 @@ import torch.nn as nn
 t.set_num_threads(1)
 t.backends.cudnn.benchmark=True
 t.backends.cudnn.deterministic=False
+
 import torch.nn.functional as F
 import argparse
 import pandas as pd
@@ -14,6 +15,14 @@ from timeit import default_timer as timer
 
 import bayesfunc
 from models.resnet8 import net as resnet8
+import lab as B
+import lab.torch
+
+B.default_dtype = t.float64
+t.set_default_dtype(t.float64)
+B.epsilon = 0.0
+key = B.create_random_state(B.default_dtype, seed=0)
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('output_filename',     type=str,   help='output filename', nargs='?', default='test')
@@ -26,7 +35,7 @@ parser.add_argument('--temperL',           action='store_true',  help='temper be
 parser.add_argument('--test_samples',      type=int,   help='samples of the weights', nargs='?', default=10)
 parser.add_argument('--train_samples',     type=int,   help='samples of the weights', nargs='?', default=1)
 parser.add_argument('--prior',             type=str,   help='Prior', nargs='?', default="SpatialIWPrior")
-parser.add_argument('--device',            type=str,   help='Device', nargs='?', default="cuda")
+parser.add_argument('--device',            type=str,   help='Device', nargs='?', default="cpu`")
 parser.add_argument('--batch',             type=int,   help='Batch size', nargs='?', default=500)
 parser.add_argument('--subset',            type=int,   help='subset of data size', nargs='?')
 parser.add_argument('--epochs',            type=int,   nargs='?', default=1000)
@@ -64,6 +73,7 @@ inducing_batch = 500
 
 kwargs = {
     'prior'             : getattr(bayesfunc.priors, args.prior),
+    'key': key,
 }
 kwargs_lower = {
     'fac' : dict(kwargs),
@@ -87,8 +97,8 @@ if (args.method == 'gi'):
         net, 
         bayesfunc.InducingRemove(inducing_batch)
     )
-net = net.to(device=device)
-
+# net = net.to(device=device)
+device = B.ActiveDevice.active_name
 
 #initialize with a forward pass
 net(next(iter(train_loader))[0].to(device).unsqueeze(0))
