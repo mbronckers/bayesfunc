@@ -1,3 +1,4 @@
+import lab as B
 import math
 import torch as t
 import torch.nn as nn
@@ -32,10 +33,14 @@ class FactorisedParam(nn.Module):
         self.log_var_lr = log_var_lr
 
         shape = (out_features, self.in_features)
-        self.post_mean = nn.Parameter(mean_init_mult * t.randn(*shape))
+        # self.post_mean = nn.Parameter(mean_init_mult * t.randn(*shape))
+        self.post_mean = nn.Parameter(mean_init_mult * t.zeros(*shape))
         if var_fixed is None:
-            lv_init = math.log(var_init_mult)/log_var_lr
+            # lv_init = math.log(var_init_mult)/log_var_lr
+            lv_init = B.log(var_init_mult)
             self.post_log_var_scaled = nn.Parameter(lv_init*t.ones(*shape))
+
+
         else:
             self.post_log_var_scaled = math.log(var_fixed)/log_var_lr
 
@@ -46,7 +51,11 @@ class FactorisedParam(nn.Module):
 
         post_log_var = self.post_log_var_scaled*self.log_var_lr
         sqrt_prec = 1./math.sqrt(self.in_features)
-        Qw = Normal(sqrt_prec*self.post_mean, sqrt_prec*t.exp(t.ones((), device=Xi.device)*0.5*post_log_var))
+        # Qw = Normal(sqrt_prec*self.post_mean, \
+        Qw = Normal(self.post_mean, \
+                    # sqrt_prec*
+                    t.exp(t.ones((), device=Xi.device)*0.5*post_log_var)
+                    )
 
         if self._sample is not None:
             assert S == self._sample.shape[0]

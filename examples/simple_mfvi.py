@@ -25,7 +25,7 @@ t.set_printoptions(precision=10, sci_mode=False)
 B.default_dtype = t.float64
 B.epsilon = 0.0
 key = B.create_random_state(B.default_dtype, seed=0)
-# B.set_random_seed(0)
+B.set_random_seed(0)
 
 # X = t.zeros(train_batch, in_features)
 # X[:int(train_batch/2), :] = t.rand(int(train_batch/2), in_features)*2. - 4.
@@ -39,14 +39,13 @@ key = B.create_random_state(B.default_dtype, seed=0)
 dtype=t.float64
 device="cpu"
 
-key, _, _, X, y, _, _, scale = generate_data(key, dgp=1, size=train_batch, xmin=-4.0, xmax=4.0)
+# key, _, _, X, y, _, _, scale = generate_data(key, dgp=1, size=train_batch, xmin=-4.0, xmax=4.0)
 
 # If comparing to term6, use the following:
-X = t.load(os.path.join(file_dir, "data/pvi_x_tr.pt"), map_location=t.device('cpu'))
-y = t.load(os.path.join(file_dir, "data/pvi_y_tr.pt"), map_location=t.device('cpu'))
+X = t.load(os.path.join(file_dir, "data/mfvi_x_tr.pt"), map_location=t.device('cpu'))
+y = t.load(os.path.join(file_dir, "data/mfvi_y_tr.pt"), map_location=t.device('cpu'))
 # scale = 20.00762265544338
-scale = 21.425325393676758
-
+scale = 18.69775412585139
 
 print(f"Scale DGP: {scale}")
 print(f"ll_var: {3/scale}")
@@ -92,55 +91,37 @@ def train(net):
         if i == 0 or i % 100 == 0: 
 
             print(f"{i:4} | elbo: {elbo.mean():13.3f} - ll: {ll.mean():13.3f} - logpq: {-(logpq).mean():13.3f} - error: {error:8.5f}")
+
+            # print("Final layer nz:")
+            # print(1/net[-1].weights.post_log_var_scaled.exp())
+
+            print("First layer means:")
+            print(net[0].weights.post_mean)
+            print("First layer nz:")
+            print(1/net[0].weights.post_log_var_scaled.exp())
+
     
         opt.step()
     print(f"ELBO: {elbo.mean().item()}")
         
 
-inducing_batch=train_batch
-
-# Linspace yz
-_yz, _ = t.meshgrid(B.linspace(-1, 1, 50), B.ones(inducing_batch))
-_yz = _yz.transpose(-1, -2)
 net = nn.Sequential(
-                    bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, neuron_prec=True, log_prec_init=-4.0, inducing_targets=_yz),
-                nn.ReLU(),
-                    bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, neuron_prec=True, full_prec=False, log_prec_init=-4.0, inducing_targets=_yz),
-                nn.ReLU(),
-                    bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, neuron_prec=True, prior=NealPrior, bias=True, full_prec=False,
-                                inducing_targets=y, log_prec_init=-4.0)
-                )
+    bf.FactorisedLinear(in_features=1, out_features=50, bias=True),
+    nn.ReLU(),
+    bf.FactorisedLinear(in_features=50, out_features=50, bias=True),
+    nn.ReLU(),
+    bf.FactorisedLinear(in_features=50, out_features=1, bias=True)
+)
 
-# net = nn.Sequential(
-#                     bf.GILinear(in_features=1, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, full_prec=False, neuron_prec=True, log_prec_init=-4.0),
-#                 nn.ReLU(),
-#                     bf.GILinear(in_features=50, out_features=50, key=key, inducing_batch=inducing_batch, prior=NealPrior, bias=True, neuron_prec=True, full_prec=False, log_prec_init=-4.0),
-#                 nn.ReLU(),
-#                     bf.GILinear(in_features=50, out_features=1, key=key, inducing_batch=inducing_batch, neuron_prec=True, prior=NealPrior, bias=True, full_prec=False, inducing_targets=y, log_prec_init=-4.0)
-#                 )
-                
-# Linspace for inducing points
-# net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=t.linspace(-4, 4, inducing_batch)[:, None])
-
-net = bf.InducingWrapper(net, inducing_batch=inducing_batch, inducing_data=X)
 net = net.to(device=device, dtype=dtype)
 
-_z = net[0].inducing_data.detach().clone()
-_yz = net[1][4].weights.u.detach().clone()
-
-print("Final layer nz:")
-print(net[1][-1].weights.log_prec_scaled)
-print("inducing pt locations:")
-print(_z)
-# plot(net)
-# plt.show()
 
 train(net)
 
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 plt.scatter(X, y, label="Training data")
-plt.scatter(_z, _yz, label="Pre-training")
-plt.scatter(net[0].inducing_data, net[1][4].weights.u, label="Post-training")
+# plt.scatter(_z, _yz, label="Pre-training")
+# plt.scatter(net[0].inducing_data, net[1][4].weights.u, label="Post-training")
 plt.legend()
 plt.show()
 
@@ -148,10 +129,10 @@ print(f"Scale DGP: {scale}")
 print(f"ll_var: {3/scale}")
 
 print("Final layer nz:")
-print(net[1][-1].weights.log_prec_scaled.exp())
+print(1/net[-1].weights.post_log_var_scaled.exp())
 
-print("Final layer log nz:")
-print(net[1][-1].weights.log_prec_scaled)
+# print("Final layer log var:")
+# print(net[-1].weights.post_log_var_scaled)
 
 # _z = net[0].inducing_data.detach().clone()
 # _yz = net[1][4].weights.u.detach().clone()
